@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Glass — 3D Study Hourglass Timer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts matching the rounded marker look in the screenshot -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #212834;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+        }
+
+        /* Exact rounded digital clock styling from screenshot */
+        .timer-digits {
+            font-family: 'Fredoka', sans-serif;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            color: #ffffff;
+            text-shadow: 
+                0 4px 24px rgba(0, 0, 0, 0.35),
+                0 0 2px rgba(255, 255, 255, 0.4);
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+
+        .electron-glow-text {
+            text-shadow: 
+                0 0 25px rgba(56, 189, 248, 0.45),
+                0 4px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Completely stationary, rock-solid hourglass container */
+        #hourglassWrapper {
+            transform: none !important;
+        }
+
+        /* Subtle HUD auto-hide transition */
+        .hud-controls {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        body.idle-focus .hud-controls {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(10px);
+        }
+
+        body.idle-focus {
+            cursor: none;
+        }
+
+        /* Custom glassmorphism for modal */
+        .glass-panel {
+            background: rgba(24, 30, 42, 0.88);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="relative w-full h-full flex items-center justify-center">
+
+    <!-- Background Starry Sky Canvas (Matches the exact dark slate night sky in screenshot) -->
+    <canvas id="starCanvas" class="fixed inset-0 w-full h-full pointer-events-none z-0"></canvas>
+
+    <!-- Main Study Split View Container (Matches Reference Image Layout) -->
+    <main class="relative z-10 w-full max-w-7xl h-full mx-auto px-6 md:px-16 flex flex-col md:flex-row items-center justify-center md:justify-between gap-4 md:gap-8">
+        
+        <!-- Left Side: Large Clean Countdown Display -->
+        <div class="flex flex-col items-center md:items-start justify-center md:pl-8 lg:pl-16 order-2 md:order-1">
+            <!-- Status Pill (Subtle, hides during deep idle focus) -->
+            <div class="hud-controls mb-3 flex items-center gap-2.5 px-3.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-slate-300">
+                <span id="statusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="statusLabel">Focusing • Golden Sand</span>
+            </div>
+
+            <!-- The Big Countdown Clock -->
+            <div id="timerDisplay" class="timer-digits text-7xl sm:text-8xl md:text-[7.25rem] lg:text-[8.5rem] select-none cursor-pointer transition-transform active:scale-95" title="Click to Pause / Resume">
+                30:00
+            </div>
+
+            <!-- Minimal Progress Bar under timer (visible on hover) -->
+            <div class="hud-controls w-48 sm:w-64 h-1.5 bg-white/10 rounded-full overflow-hidden mt-5">
+                <div id="progressBar" class="h-full bg-amber-400 transition-all duration-300 rounded-full" style="width: 100%"></div>
+            </div>
+        </div>
+
+        <!-- Right Side: 3D Realistic Sandglass Canvas -->
+        <div class="relative flex items-center justify-center order-1 md:order-2 w-full md:w-auto h-[54vh] sm:h-[65vh] md:h-[84vh] aspect-[3/4] max-h-[760px]">
+            <div id="hourglassWrapper" class="relative w-full h-full flex items-center justify-center">
+                <canvas id="hourglassCanvas" class="w-full h-full block"></canvas>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Floating Bottom Control Bar (Auto-hides when mouse is inactive during study) -->
+    <div class="hud-controls fixed bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-3 px-4 py-2.5 rounded-2xl glass-panel">
+        <!-- Play / Pause Button -->
+        <button id="playPauseBtn" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm transition shadow-lg shadow-amber-500/20 active:scale-95">
+            <i id="playPauseIcon" class="ph-fill ph-pause text-lg"></i>
+            <span id="playPauseText">Pause</span>
+        </button>
+
+        <!-- Reset Hourglass Button (No movement/rotation on the glass itself) -->
+        <button id="flipResetBtn" class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/15 text-slate-200 font-medium text-sm transition active:scale-95" title="Reset Hourglass Timer">
+            <i class="ph-bold ph-arrow-counter-clockwise text-lg"></i>
+            <span class="hidden sm:inline">Reset</span>
+        </button>
+
+        <div class="h-5 w-[1px] bg-white/10 mx-0.5"></div>
+
+        <!-- Quick Material Switcher (Sand vs Electron e⁻) -->
+        <button id="quickMaterialBtn" class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/15 text-slate-200 font-medium text-sm transition active:scale-95" title="Switch Material (Sand / Electron e⁻)">
+            <span id="quickMaterialBadge" class="w-5 h-5 rounded-md bg-amber-400/20 border border-amber-400/50 text-amber-300 flex items-center justify-center text-xs font-mono font-bold">⏳</span>
+            <span id="quickMaterialText" class="hidden sm:inline">Sand</span>
+        </button>
+
+        <!-- Ambient Study Tick / White Noise Sound Button -->
+        <button id="soundToggleBtn" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-slate-300 transition active:scale-95" title="Toggle Ambient Flow Sound & Completion Bell">
+            <i id="soundIcon" class="ph-bold ph-speaker-high text-lg"></i>
+        </button>
+
+        <!-- Settings Modal Trigger -->
+        <button id="openSettingsBtn" class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-sm border border-white/10 transition active:scale-95">
+            <i class="ph-bold ph-sliders-horizontal text-lg"></i>
+            <span>Settings</span>
+        </button>
+
+        <!-- Fullscreen Toggle -->
+        <button id="fullscreenBtn" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-slate-300 transition active:scale-95" title="Toggle Fullscreen for Study">
+            <i id="fullscreenIcon" class="ph-bold ph-corners-out text-lg"></i>
+        </button>
+    </div>
+
+    <!-- Settings & Customization Modal -->
+    <div id="settingsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md transition-opacity duration-300">
+        <div class="glass-panel w-full max-w-lg rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden border border-white/15 animate-fadeIn">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-300">
+                        <i class="ph-fill ph-hourglass-high text-2xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold tracking-tight">Study Timer Setup</h2>
+                        <p class="text-xs text-slate-400">Customize your 3D hourglass before starting focus</p>
+                    </div>
+                </div>
+                <button id="closeSettingsBtn" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+
+            <!-- 1. Duration Selection -->
+            <div class="mb-6">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                    1. Choose Study Duration
+                </label>
+                <!-- Preset Buttons -->
+                <div class="grid grid-cols-5 gap-2 mb-3">
+                    <button type="button" data-mins="15" class="duration-preset py-2.5 rounded-xl text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition">15m</button>
+                    <button type="button" data-mins="25" class="duration-preset py-2.5 rounded-xl text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition">25m</button>
+                    <button type="button" data-mins="30" class="duration-preset py-2.5 rounded-xl text-sm font-semibold border border-amber-400 bg-amber-500/20 text-amber-300 transition">30m</button>
+                    <button type="button" data-mins="45" class="duration-preset py-2.5 rounded-xl text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition">45m</button>
+                    <button type="button" data-mins="60" class="duration-preset py-2.5 rounded-xl text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition">60m</button>
+                </div>
+
+                <!-- Custom Minutes & Seconds Inputs -->
+                <div class="grid grid-cols-2 gap-3 bg-slate-900/70 p-3.5 rounded-2xl border border-white/10">
+                    <div>
+                        <span class="block text-[11px] text-slate-400 mb-1">Custom Minutes (0 - 180)</span>
+                        <input id="customMinutesInput" type="number" min="0" max="180" value="30" class="w-full bg-slate-800/90 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-amber-400">
+                    </div>
+                    <div>
+                        <span class="block text-[11px] text-slate-400 mb-1">Custom Seconds (0 - 59)</span>
+                        <input id="customSecondsInput" type="number" min="0" max="59" value="0" class="w-full bg-slate-800/90 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-amber-400">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Material Selection (Sand vs Electron e⁻) -->
+            <div class="mb-7">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                    2. Choose Hourglass Material
+                </label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- Golden Sand Card -->
+                    <div id="matSandCard" data-material="sand" class="material-card cursor-pointer p-4 rounded-2xl border-2 border-amber-400 bg-amber-500/15 transition flex items-start gap-3.5">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-300 via-amber-500 to-yellow-700 flex items-center justify-center text-slate-950 font-bold text-xl shadow-md shrink-0">
+                            <i class="ph-fill ph-grains"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-bold text-sm text-white">Golden Sand</h3>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-semibold">Classic</span>
+                            </div>
+                            <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+                                Realistic 3D warm desert sand grains with natural funnel physics.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Electron (e⁻) Card -->
+                    <div id="matElectronCard" data-material="electron" class="material-card cursor-pointer p-4 rounded-2xl border-2 border-white/10 bg-white/5 hover:bg-white/10 transition flex items-start gap-3.5">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-300 via-sky-500 to-blue-700 flex items-center justify-center text-slate-950 font-mono font-bold text-lg shadow-md shadow-cyan-500/30 shrink-0">
+                            e⁻
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-bold text-sm text-white">Electrons (e⁻)</h3>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-400/20 text-cyan-300 font-semibold">Physics</span>
+                            </div>
+                            <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+                                Glowing quantum <span class="font-mono text-cyan-300 font-semibold">e⁻</span> charge particles with plasma stream & sparks.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Button: Start Focus Session -->
+            <button id="applyAndStartBtn" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold text-base shadow-xl shadow-amber-500/20 transition transform active:scale-[0.99] flex items-center justify-center gap-2">
+                <i class="ph-fill ph-play-circle text-xl"></i>
+                <span>Start Focus Timer</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Session Complete Toast Notification -->
+    <div id="completeBanner" class="fixed top-6 left-1/2 -translate-x-1/2 z-40 hidden items-center gap-3 px-5 py-3 rounded-2xl glass-panel border border-emerald-400/40 text-white shadow-2xl">
+        <div class="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-300">
+            <i class="ph-bold ph-check text-lg"></i>
+        </div>
+        <div>
+            <p class="text-sm font-bold">Focus Session Complete!</p>
+            <p class="text-xs text-slate-300">Great study session. Click Reset to start another round.</p>
+        </div>
+        <button id="bannerFlipBtn" class="ml-3 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs transition">
+            Start Again
+        </button>
+    </div>
+
+    <script>
+        /********************************************************************
+         * 1. APPLICATION STATE & CONFIGURATION
+         ********************************************************************/
+        const state = {
+            totalSeconds: 30 * 60,        // Default 30 minutes (1800s)
+            remainingSeconds: 30 * 60,
+            isRunning: true,
+            material: 'sand',             // 'sand' | 'electron'
+            soundEnabled: true,
+            lastTickTime: performance.now(),
+            particles: [],                // Falling stream, bouncing & slope-rolling grains
+            surfaceGrains: [],            // Micro-grains sliding into the top funnel & down the bottom cone
+            floatingInsideParticles: [],  // Floating e⁻ symbols inside the chambers
+            stars: []
+        };
+
+        // Material Color Palettes for Realistic 3D Shading
+        const MATERIALS = {
+            sand: {
+                name: 'Golden Sand',
+                symbol: null,
+                topSurfaceLight: '#f6d283',
+                topSurfaceMid: '#df9f41',
+                topSurfaceDark: '#9e6216',
+                bulkGradient: [
+                    { stop: 0.0, color: '#7d4b0e' },
+                    { stop: 0.18, color: '#b87622' },
+                    { stop: 0.42, color: '#e5a84b' },
+                    { stop: 0.58, color: '#f3be67' },
+                    { stop: 0.80, color: '#c48129' },
+                    { stop: 1.0, color: '#6e400a' }
+                ],
+                streamPrimary: 'rgba(242, 188, 94, 0.96)',
+                streamSecondary: 'rgba(186, 121, 32, 0.88)',
+                particleColors: ['#fce19c', '#f0b85a', '#d99132', '#b87119', '#fff2cc'],
+                glowColor: 'rgba(234, 179, 71, 0.15)',
+                accentHex: '#f59e0b'
+            },
+            electron: {
+                name: 'Electrons (e⁻)',
+                symbol: 'e⁻',
+                topSurfaceLight: '#7dd3fc',
+                topSurfaceMid: '#0ea5e9',
+                topSurfaceDark: '#0369a1',
+                bulkGradient: [
+                    { stop: 0.0, color: '#082f49' },
+                    { stop: 0.25, color: '#0284c7' },
+                    { stop: 0.52, color: '#38bdf8' },
+                    { stop: 0.78, color: '#0284c7' },
+                    { stop: 1.0, color: '#0c4a6e' }
+                ],
+                streamPrimary: 'rgba(125, 211, 252, 0.95)',
+                streamSecondary: 'rgba(14, 165, 233, 0.85)',
+                particleColors: ['#bae6fd', '#38bdf8', '#7dd3fc', '#ffffff'],
+                glowColor: 'rgba(56, 189, 248, 0.35)',
+                accentHex: '#38bdf8'
+            }
+        };
+
+        /********************************************************************
+         * 1B. PROCEDURAL HIGH-RES DESERT SAND TEXTURE GENERATOR
+         * Inspired by sunlit golden desert dunes (fine quartz, ochre, amber,
+         * warm sienna micro-grains and natural wind-blown dune ripples)
+         ********************************************************************/
+        let desertSandPattern = null;
+        let desertSandCanvas = null;
+
+        function generateDesertSandTexture() {
+            const tw = 256;
+            const th = 256;
+            desertSandCanvas = document.createElement('canvas');
+            desertSandCanvas.width = tw;
+            desertSandCanvas.height = th;
+            const tCtx = desertSandCanvas.getContext('2d');
+
+            const imgData = tCtx.createImageData(tw, th);
+            const data = imgData.data;
+
+            // Deterministic pseudo-random helper for rich organic grain distribution
+            let seed = 1337;
+            function rand() {
+                seed = (seed * 16807) % 2147483647;
+                return (seed - 1) / 2147483646;
+            }
+
+            for (let y = 0; y < th; y++) {
+                // Subtle horizontal desert dune ripple wave
+                const rippleWave = Math.sin((y / th) * Math.PI * 16) * 7 + Math.cos((y / th) * Math.PI * 6) * 4;
+
+                for (let x = 0; x < tw; x++) {
+                    const idx = (y * tw + x) * 4;
+
+                    // Multi-scale granular noise
+                    const n1 = (rand() - 0.5) * 34;
+                    const n2 = Math.sin((x + y * 0.4) * 0.12) * 5;
+                    const rRoll = rand();
+
+                    // Base warm golden-ochre desert sand RGB (#dfa046)
+                    let r = 223 + rippleWave + n2 + n1;
+                    let g = 160 + rippleWave * 0.78 + n2 * 0.8 + n1 * 0.82;
+                    let b = 70 + rippleWave * 0.45 + n2 * 0.5 + n1 * 0.55;
+
+                    // 6% chance of fine sunlit quartz crystal sparkle grain
+                    if (rRoll > 0.94) {
+                        r += 32;
+                        g += 30;
+                        b += 26;
+                    } else if (rRoll < 0.08) {
+                        // 8% chance of darker roasted sienna/bronze mineral grain
+                        r -= 28;
+                        g -= 24;
+                        b -= 16;
+                    }
+
+                    data[idx]     = Math.max(0, Math.min(255, r));
+                    data[idx + 1] = Math.max(0, Math.min(255, g));
+                    data[idx + 2] = Math.max(0, Math.min(255, b));
+                    data[idx + 3] = 255;
+                }
+            }
+
+            tCtx.putImageData(imgData, 0, 0);
+        }
+
+        /********************************************************************
+         * 2. SYNTHESIZED WEB AUDIO API (Chime & Subtle Tick/Flow)
+         ********************************************************************/
+        let audioCtx = null;
+
+        function ensureAudioContext() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playCompletionChime() {
+            if (!state.soundEnabled) return;
+            try {
+                ensureAudioContext();
+                if (!audioCtx) return;
+
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = state.material === 'electron' ? 'triangle' : 'sine';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.16);
+
+                    gain.gain.setValueAtTime(0.001, audioCtx.currentTime + idx * 0.16);
+                    gain.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + idx * 0.16 + 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + idx * 0.16 + 1.4);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(audioCtx.currentTime + idx * 0.16);
+                    osc.stop(audioCtx.currentTime + idx * 0.16 + 1.45);
+                });
+            } catch (e) {
+                // Ignore audio block errors if user hasn't interacted yet
+            }
+        }
+
+        function playFlipSound() {
+            if (!state.soundEnabled) return;
+            try {
+                ensureAudioContext();
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(240, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(520, audioCtx.currentTime + 0.22);
+
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.26);
+            } catch (e) {}
+        }
+
+        /********************************************************************
+         * 3. STARRY NIGHT SKY BACKGROUND CANVAS (Matches Screenshot)
+         ********************************************************************/
+        const starCanvas = document.getElementById('starCanvas');
+        const starCtx = starCanvas.getContext('2d');
+
+        function initStars() {
+            starCanvas.width = window.innerWidth;
+            starCanvas.height = window.innerHeight;
+            const count = Math.floor((starCanvas.width * starCanvas.height) / 9500);
+            state.stars = [];
+            for (let i = 0; i < count; i++) {
+                state.stars.push({
+                    x: Math.random() * starCanvas.width,
+                    y: Math.random() * starCanvas.height,
+                    radius: Math.random() * 1.7 + 0.4,
+                    baseAlpha: Math.random() * 0.55 + 0.15,
+                    twinkleSpeed: Math.random() * 1.8 + 0.4,
+                    phase: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function renderStarfield(now) {
+            const w = starCanvas.width;
+            const h = starCanvas.height;
+
+            // Exact deep slate-navy background gradient matching the reference image
+            const bgGrad = starCtx.createRadialGradient(w * 0.65, h * 0.5, 50, w * 0.5, h * 0.5, Math.max(w, h));
+            bgGrad.addColorStop(0, '#262f3d');
+            bgGrad.addColorStop(0.6, '#202733');
+            bgGrad.addColorStop(1, '#191f29');
+            starCtx.fillStyle = bgGrad;
+            starCtx.fillRect(0, 0, w, h);
+
+            // Subtle ambient glow behind the hourglass when Electron mode is active
+            if (state.material === 'electron') {
+                const eGlow = starCtx.createRadialGradient(w * 0.7, h * 0.5, 20, w * 0.7, h * 0.5, h * 0.45);
+                eGlow.addColorStop(0, 'rgba(14, 165, 233, 0.11)');
+                eGlow.addColorStop(1, 'rgba(14, 165, 233, 0)');
+                starCtx.fillStyle = eGlow;
+                starCtx.fillRect(0, 0, w, h);
+            }
+
+            // Draw twinkling dust/stars
+            const t = now * 0.001;
+            for (const s of state.stars) {
+                const alpha = s.baseAlpha + Math.sin(t * s.twinkleSpeed + s.phase) * 0.15;
+                starCtx.fillStyle = `rgba(215, 225, 240, ${Math.max(0.06, Math.min(0.85, alpha))})`;
+                starCtx.beginPath();
+                starCtx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                starCtx.fill();
+            }
+        }
+
+        /********************************************************************
+         * 4. REALISTIC 3D HOURGLASS RENDERER (100% Rock-Solid & Stationary)
+         ********************************************************************/
+        const hgCanvas = document.getElementById('hourglassCanvas');
+        const ctx = hgCanvas.getContext('2d');
+
+        // Internal high-DPI coordinate space (600 x 800) for crisp 3D vectors
+        const VW = 600;
+        const VH = 800;
+
+        // Key Hourglass Geometry Coordinates matching screenshot proportions
+        const GEO = {
+            cx: 300,
+            topCapY: 58,
+            topCapH: 42,
+            topInnerPlateY: 100,
+            topInnerPlateH: 22,
+            glassTopY: 122,
+            neckY: 400,
+            glassBotY: 678,
+            botInnerPlateY: 678,
+            botInnerPlateH: 22,
+            botCapY: 700,
+            botCapH: 42,
+            bulbMaxRx: 142,
+            neckRx: 14
+        };
+
+        function resizeHourglassCanvas() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const rect = hgCanvas.getBoundingClientRect();
+            // Round to exact integer pixels so the hourglass never shifts or jitters by subpixels
+            hgCanvas.width = Math.round(rect.width * dpr);
+            hgCanvas.height = Math.round(rect.height * dpr);
+            if (desertSandCanvas) {
+                desertSandPattern = ctx.createPattern(desertSandCanvas, 'repeat');
+            }
+        }
+
+        /**
+         * Returns the exact horizontal half-width (radius X) of the upper bulb at any Y
+         * between glassTopY (122) and neckY (400).
+         */
+        function getUpperBulbHalfWidth(y) {
+            const t = Math.max(0, Math.min(1, (y - GEO.glassTopY) / (GEO.neckY - GEO.glassTopY)));
+            // Smooth bell-shaped blown glass profile matching the reference screenshot
+            const bell = Math.sin((1 - t) * Math.PI * 0.68 + 0.25);
+            const pinch = Math.pow(1 - t, 0.58);
+            const factor = Math.max(0, Math.min(1, bell * 0.72 + pinch * 0.36));
+            return GEO.neckRx + (GEO.bulbMaxRx - GEO.neckRx) * factor;
+        }
+
+        /**
+         * Returns the exact horizontal half-width (radius X) of the lower bulb at any Y
+         * between neckY (400) and glassBotY (678).
+         */
+        function getLowerBulbHalfWidth(y) {
+            const t = Math.max(0, Math.min(1, (y - GEO.neckY) / (GEO.glassBotY - GEO.neckY)));
+            const mirrorY = GEO.glassTopY + (1 - t) * (GEO.neckY - GEO.glassTopY);
+            return getUpperBulbHalfWidth(mirrorY);
+        }
+
+        /**
+         * Traces the closed 2D path of the entire hourglass glass envelope with an optional inset
+         */
+        function traceHourglassBulbPath(context, inset = 0) {
+            const steps = 60;
+            context.beginPath();
+
+            // Left wall from top to neck
+            for (let i = 0; i <= steps; i++) {
+                const y = GEO.glassTopY + (i / steps) * (GEO.neckY - GEO.glassTopY);
+                const rx = Math.max(2, getUpperBulbHalfWidth(y) - inset);
+                const x = GEO.cx - rx;
+                if (i === 0) context.moveTo(x, y);
+                else context.lineTo(x, y);
+            }
+
+            // Left wall from neck to bottom
+            for (let i = 1; i <= steps; i++) {
+                const y = GEO.neckY + (i / steps) * (GEO.glassBotY - GEO.neckY);
+                const rx = Math.max(2, getLowerBulbHalfWidth(y) - inset);
+                const x = GEO.cx - rx;
+                context.lineTo(x, y);
+            }
+
+            // Right wall from bottom to neck
+            for (let i = steps; i >= 0; i--) {
+                const y = GEO.neckY + (i / steps) * (GEO.glassBotY - GEO.neckY);
+                const rx = Math.max(2, getLowerBulbHalfWidth(y) - inset);
+                const x = GEO.cx + rx;
+                context.lineTo(x, y);
+            }
+
+            // Right wall from neck to top
+            for (let i = steps - 1; i >= 0; i--) {
+                const y = GEO.glassTopY + (i / steps) * (GEO.neckY - GEO.glassTopY);
+                const rx = Math.max(2, getUpperBulbHalfWidth(y) - inset);
+                const x = GEO.cx + rx;
+                context.lineTo(x, y);
+            }
+
+            context.closePath();
+        }
+
+        // Initialize internal floating charge particles for Electron mode & sliding surface sand grains
+        function initFloatingSymbols() {
+            state.floatingInsideParticles = [];
+            for (let i = 0; i < 28; i++) {
+                state.floatingInsideParticles.push({
+                    offsetX: (Math.random() - 0.5) * 1.6, // Normalized -0.8 to 0.8 of bulb width
+                    offsetY: Math.random(),               // Normalized height within bulk
+                    chamber: i < 14 ? 'top' : 'bottom',
+                    speed: 0.4 + Math.random() * 0.8,
+                    phase: Math.random() * Math.PI * 2,
+                    size: 13 + Math.floor(Math.random() * 5)
+                });
+            }
+
+            // Initialize 65 micro-grains that slide down the top funnel & roll down the bottom dune slopes
+            state.surfaceGrains = [];
+            for (let i = 0; i < 65; i++) {
+                state.surfaceGrains.push({
+                    zone: i < 28 ? 'topFunnel' : 'bottomSlope',
+                    progress: Math.random(),
+                    side: Math.random() < 0.5 ? -1 : 1,
+                    spread: (Math.random() - 0.5) * 0.9,
+                    speed: 0.35 + Math.random() * 0.55,
+                    radius: 1.1 + Math.random() * 1.4,
+                    color: MATERIALS.sand.particleColors[i % MATERIALS.sand.particleColors.length]
+                });
+            }
+        }
+        initFloatingSymbols();
+
+        /**
+         * Updates and spawns active stream particles falling from the neck to the bottom pile
+         */
+        function updateStreamParticles(dt, progress, bottomPeakY) {
+            const isFlowing = state.isRunning && state.remainingSeconds > 0 && progress > 0;
+
+            // Update surface sliding grains on the top crater and bottom cone slopes
+            if (isFlowing && state.material === 'sand') {
+                for (const sg of state.surfaceGrains) {
+                    sg.progress += dt * sg.speed;
+                    if (sg.progress >= 1) {
+                        sg.progress = 0;
+                        sg.side = Math.random() < 0.5 ? -1 : 1;
+                        sg.spread = (Math.random() - 0.5) * 0.9;
+                    }
+                }
+            }
+
+            // Spawn falling particles in the stream and impact sparks on the mound peak
+            if (isFlowing) {
+                const spawnCount = state.material === 'electron' ? 2 : 5;
+                for (let i = 0; i < spawnCount; i++) {
+                    // Dense stream of fine sand grains or electrons falling from neck
+                    if (Math.random() < 0.85) {
+                        state.particles.push({
+                            type: 'fall',
+                            x: GEO.cx + (Math.random() - 0.5) * (state.material === 'electron' ? 9 : 4.5),
+                            y: GEO.neckY + Math.random() * 18,
+                            vx: (Math.random() - 0.5) * (state.material === 'electron' ? 10 : 4),
+                            vy: 310 + Math.random() * 180,
+                            size: state.material === 'electron' ? 13 : (1.1 + Math.random() * 1.6),
+                            color: MATERIALS[state.material].particleColors[
+                                Math.floor(Math.random() * MATERIALS[state.material].particleColors.length)
+                            ],
+                            alpha: 0.95
+                        });
+                    }
+
+                    // Impact bounce micro-grains at the bottom dune apex
+                    if (Math.random() < 0.8) {
+                        const angle = -Math.PI * (0.12 + Math.random() * 0.76);
+                        const speed = state.material === 'electron' ? (45 + Math.random() * 75) : (18 + Math.random() * 42);
+                        state.particles.push({
+                            type: 'splash',
+                            x: GEO.cx + (Math.random() - 0.5) * 7,
+                            y: bottomPeakY + 2,
+                            vx: Math.cos(angle) * speed * (Math.random() < 0.5 ? -1 : 1),
+                            vy: Math.sin(angle) * speed * 0.5,
+                            gravity: state.material === 'electron' ? 95 : 260,
+                            life: 0,
+                            maxLife: 0.28 + Math.random() * 0.25,
+                            size: state.material === 'electron' ? 11 : (1.0 + Math.random() * 1.4),
+                            color: MATERIALS[state.material].particleColors[
+                                Math.floor(Math.random() * MATERIALS[state.material].particleColors.length)
+                            ]
+                        });
+                    }
+                }
+            }
+
+            // Update existing particles
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                if (p.type === 'fall') {
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.vy += 360 * dt; // Gravity acceleration
+                    if (p.y >= bottomPeakY + 3) {
+                        state.particles.splice(i, 1);
+                    }
+                } else {
+                    p.life += dt;
+                    p.x += p.vx * dt;
+                    p.y += p.vy * dt;
+                    p.vy += p.gravity * dt;
+                    if (p.life >= p.maxLife || p.y > GEO.glassBotY - 3) {
+                        state.particles.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Helper: Applies the procedural desert sand grain texture + 3D cylindrical lighting
+         * inside the currently defined path (used for both upper & lower sand volumes).
+         */
+        function fillRealisticSandVolume(context, mat, topY, botY) {
+            context.save();
+            context.clip();
+
+            // 1. Base warm desert gradient
+            const bulkGrad = context.createLinearGradient(
+                GEO.cx - GEO.bulbMaxRx, 0,
+                GEO.cx + GEO.bulbMaxRx, 0
+            );
+            mat.bulkGradient.forEach(s => bulkGrad.addColorStop(s.stop, s.color));
+            context.fillStyle = bulkGrad;
+            context.fillRect(GEO.cx - GEO.bulbMaxRx - 20, topY - 25, GEO.bulbMaxRx * 2 + 40, (botY - topY) + 50);
+
+            // 2. Overlay high-resolution granular desert sand texture
+            if (desertSandPattern) {
+                context.globalAlpha = 0.42;
+                context.globalCompositeOperation = 'overlay';
+                context.fillStyle = desertSandPattern;
+                context.fillRect(GEO.cx - GEO.bulbMaxRx - 20, topY - 25, GEO.bulbMaxRx * 2 + 40, (botY - topY) + 50);
+
+                // Second fine grain pass for crisp micro-sand detail
+                context.globalAlpha = 0.22;
+                context.globalCompositeOperation = 'multiply';
+                context.fillRect(GEO.cx - GEO.bulbMaxRx - 20, topY - 25, GEO.bulbMaxRx * 2 + 40, (botY - topY) + 50);
+            }
+
+            // 3. 3D Cylindrical Ambient Occlusion & Sunlit Specular Sheen
+            context.globalCompositeOperation = 'source-over';
+            context.globalAlpha = 1;
+            const shadeGrad = context.createLinearGradient(
+                GEO.cx - GEO.bulbMaxRx, 0,
+                GEO.cx + GEO.bulbMaxRx, 0
+            );
+            shadeGrad.addColorStop(0.0, 'rgba(28, 14, 2, 0.55)');
+            shadeGrad.addColorStop(0.18, 'rgba(60, 32, 5, 0.18)');
+            shadeGrad.addColorStop(0.45, 'rgba(255, 230, 165, 0.16)');
+            shadeGrad.addColorStop(0.75, 'rgba(80, 44, 8, 0.15)');
+            shadeGrad.addColorStop(1.0, 'rgba(24, 12, 2, 0.62)');
+            context.fillStyle = shadeGrad;
+            context.fillRect(GEO.cx - GEO.bulbMaxRx - 20, topY - 25, GEO.bulbMaxRx * 2 + 40, (botY - topY) + 50);
+
+            context.restore();
+        }
+
+        /**
+         * Renders the complete 3D Hourglass onto the canvas (Stationary frame + Realistic Sand)
+         */
+        function renderHourglass(now, dt) {
+            const cw = hgCanvas.width;
+            const ch = hgCanvas.height;
+            ctx.clearRect(0, 0, cw, ch);
+
+            ctx.save();
+            // Scale uniform 600x800 virtual coordinates to fit canvas cleanly without any subpixel jitter
+            const scale = Math.min(cw / VW, ch / VH);
+            const offsetX = Math.floor((cw - VW * scale) / 2);
+            const offsetY = Math.floor((ch - VH * scale) / 2);
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            const mat = MATERIALS[state.material];
+            // Fraction of time remaining (1.0 = full top bulb, 0.0 = empty top bulb)
+            const remainingRatio = state.totalSeconds > 0
+                ? Math.max(0, Math.min(1, state.remainingSeconds / state.totalSeconds))
+                : 0;
+            const elapsedRatio = 1 - remainingRatio;
+
+            /****************************************************************
+             * STEP A: TRANSLUCENT DARK GLASS BACKING & INNER SHADOW
+             ****************************************************************/
+            ctx.save();
+            traceHourglassBulbPath(ctx, 0);
+            const glassBackGrad = ctx.createLinearGradient(
+                GEO.cx - GEO.bulbMaxRx, 0,
+                GEO.cx + GEO.bulbMaxRx, 0
+            );
+            glassBackGrad.addColorStop(0.0, 'rgba(14, 18, 26, 0.85)');
+            glassBackGrad.addColorStop(0.2, 'rgba(26, 33, 45, 0.65)');
+            glassBackGrad.addColorStop(0.5, 'rgba(38, 48, 64, 0.45)');
+            glassBackGrad.addColorStop(0.8, 'rgba(24, 30, 42, 0.68)');
+            glassBackGrad.addColorStop(1.0, 'rgba(10, 14, 20, 0.88)');
+            ctx.fillStyle = glassBackGrad;
+            ctx.fill();
+            ctx.restore();
+
+            /****************************************************************
+             * STEP B: CLIP TO INNER GLASS CHAMBER FOR MATERIAL & STREAM
+             ****************************************************************/
+            ctx.save();
+            traceHourglassBulbPath(ctx, 4);
+            ctx.clip();
+
+            // Calculate Top Material Surface Y (accounting for bulb volume curve)
+            // At 100% remaining, level is near y=166 (just like screenshot)
+            const fullTopY = 166;
+            const topDepthRange = GEO.neckY - fullTopY;
+            // Non-linear mapping so volume looks realistic in a tapered cone/bulb
+            const visualTopFraction = Math.pow(remainingRatio, 0.62);
+            const topSurfaceY = GEO.neckY - visualTopFraction * topDepthRange;
+
+            // Calculate Bottom Mound Peak Y & Base Height
+            const maxBottomPileHeight = 228;
+            const visualBotFraction = Math.pow(elapsedRatio, 0.68);
+            const currentPileHeight = visualBotFraction * maxBottomPileHeight;
+            const bottomPeakY = GEO.glassBotY - currentPileHeight;
+
+            // Update falling stream particles
+            updateStreamParticles(dt, remainingRatio, bottomPeakY);
+
+            // 1. DRAW FALLING CENTER STREAM (Behind top meniscus & bottom mound)
+            if (remainingRatio > 0.001) {
+                const streamAlpha = state.isRunning ? 1 : 0.35;
+                ctx.save();
+                ctx.globalAlpha = streamAlpha;
+
+                if (state.material === 'electron') {
+                    // Glowing quantum plasma beam
+                    ctx.shadowColor = '#38bdf8';
+                    ctx.shadowBlur = 14;
+
+                    const streamGrad = ctx.createLinearGradient(0, GEO.neckY, 0, bottomPeakY + 12);
+                    streamGrad.addColorStop(0, mat.streamPrimary);
+                    streamGrad.addColorStop(0.6, mat.streamSecondary);
+                    streamGrad.addColorStop(1, mat.streamPrimary);
+
+                    ctx.strokeStyle = streamGrad;
+                    ctx.lineWidth = 4.5;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(GEO.cx, GEO.neckY - 4);
+                    ctx.lineTo(GEO.cx, bottomPeakY + 6);
+                    ctx.stroke();
+                } else {
+                    // Realistic multi-layered golden sand stream pouring down the center
+                    const outerStreamGrad = ctx.createLinearGradient(0, GEO.neckY, 0, bottomPeakY + 10);
+                    outerStreamGrad.addColorStop(0, 'rgba(217, 152, 48, 0.85)');
+                    outerStreamGrad.addColorStop(0.5, 'rgba(235, 178, 78, 0.72)');
+                    outerStreamGrad.addColorStop(1, 'rgba(201, 134, 34, 0.90)');
+
+                    ctx.strokeStyle = outerStreamGrad;
+                    ctx.lineWidth = 5.5;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(GEO.cx, GEO.neckY - 4);
+                    ctx.lineTo(GEO.cx, bottomPeakY + 6);
+                    ctx.stroke();
+
+                    // Bright sunlit core of the falling sand column
+                    ctx.strokeStyle = 'rgba(253, 224, 155, 0.82)';
+                    ctx.lineWidth = 2.2;
+                    ctx.beginPath();
+                    ctx.moveTo(GEO.cx - 0.5, GEO.neckY - 2);
+                    ctx.lineTo(GEO.cx - 0.5, bottomPeakY + 5);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            // 2. DRAW FALLING & SPLASHING PARTICLES (Grains or e⁻ Symbols)
+            for (const p of state.particles) {
+                ctx.save();
+                const alpha = p.type === 'splash' ? (1 - p.life / p.maxLife) : p.alpha;
+                ctx.globalAlpha = Math.max(0, alpha);
+
+                if (state.material === 'electron') {
+                    ctx.font = `700 ${p.size}px "JetBrains Mono", monospace`;
+                    ctx.fillStyle = p.color;
+                    ctx.shadowColor = '#38bdf8';
+                    ctx.shadowBlur = 8;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('e⁻', p.x, p.y);
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // 3. DRAW UPPER BULB MATERIAL (Realistic Granular Sand or Electrons + Sinking Funnel)
+            if (remainingRatio > 0.002) {
+                ctx.save();
+
+                // Funnel dip in the center when actively draining
+                const funnelDip = (remainingRatio < 0.98 && remainingRatio > 0.03)
+                    ? Math.min(18, (1 - remainingRatio) * 18 + 5)
+                    : 2;
+
+                const topRx = Math.max(GEO.neckRx, getUpperBulbHalfWidth(topSurfaceY) - 3);
+
+                // Define path for the main upper bulk from topSurfaceY down to neckY
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx - topRx, topSurfaceY);
+                ctx.quadraticCurveTo(GEO.cx, topSurfaceY + funnelDip, GEO.cx + topRx, topSurfaceY);
+                ctx.lineTo(GEO.cx + GEO.bulbMaxRx, GEO.neckY + 2);
+                ctx.lineTo(GEO.cx - GEO.bulbMaxRx, GEO.neckY + 2);
+                ctx.closePath();
+
+                if (state.material === 'sand') {
+                    fillRealisticSandVolume(ctx, mat, topSurfaceY - 15, GEO.neckY + 4);
+
+                    // Subtle desert dune stratify contours across the upper sand volume
+                    ctx.save();
+                    ctx.clip();
+                    ctx.strokeStyle = 'rgba(120, 70, 12, 0.16)';
+                    ctx.lineWidth = 1.2;
+                    for (let ry = topSurfaceY + 18; ry < GEO.neckY - 8; ry += 16) {
+                        const rWidth = getUpperBulbHalfWidth(ry);
+                        const pullDown = Math.min(20, (ry - topSurfaceY) * 0.16);
+                        ctx.beginPath();
+                        ctx.moveTo(GEO.cx - rWidth, ry);
+                        ctx.quadraticCurveTo(GEO.cx, ry + pullDown, GEO.cx + rWidth, ry);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                } else {
+                    const bulkGrad = ctx.createLinearGradient(
+                        GEO.cx - GEO.bulbMaxRx, 0,
+                        GEO.cx + GEO.bulbMaxRx, 0
+                    );
+                    mat.bulkGradient.forEach(s => bulkGrad.addColorStop(s.stop, s.color));
+                    ctx.fillStyle = bulkGrad;
+                    ctx.fill();
+                }
+
+                // 3D Elliptical Top Surface Cap (with natural central vortex crater)
+                const ellipseRy = Math.max(4.5, topRx * 0.135);
+                const topCapGrad = ctx.createRadialGradient(
+                    GEO.cx - topRx * 0.25, topSurfaceY - 3, 4,
+                    GEO.cx, topSurfaceY, topRx
+                );
+                topCapGrad.addColorStop(0, mat.topSurfaceLight);
+                topCapGrad.addColorStop(0.62, mat.topSurfaceMid);
+                topCapGrad.addColorStop(1, mat.topSurfaceDark);
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.ellipse(GEO.cx, topSurfaceY, topRx, ellipseRy, 0, 0, Math.PI * 2);
+                ctx.fillStyle = topCapGrad;
+                ctx.fill();
+
+                // Apply fine sand grain texture onto the top surface ellipse too
+                if (state.material === 'sand' && desertSandPattern) {
+                    ctx.clip();
+                    ctx.globalAlpha = 0.32;
+                    ctx.globalCompositeOperation = 'overlay';
+                    ctx.fillStyle = desertSandPattern;
+                    ctx.fillRect(GEO.cx - topRx, topSurfaceY - ellipseRy * 2, topRx * 2, ellipseRy * 4);
+                }
+                ctx.restore();
+
+                // Realistic sinking funnel crater shadow in the center of the top sand surface
+                if (funnelDip > 3) {
+                    const dipGrad = ctx.createRadialGradient(
+                        GEO.cx, topSurfaceY + 3, 1,
+                        GEO.cx, topSurfaceY + 2, topRx * 0.52
+                    );
+                    dipGrad.addColorStop(0, 'rgba(42, 22, 4, 0.52)');
+                    dipGrad.addColorStop(0.55, 'rgba(95, 54, 10, 0.22)');
+                    dipGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = dipGrad;
+                    ctx.beginPath();
+                    ctx.ellipse(GEO.cx, topSurfaceY + 2, topRx * 0.52, ellipseRy * 0.82, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Draw sliding surface sand grains converging into the upper funnel vortex
+                if (state.material === 'sand' && remainingRatio > 0.04) {
+                    for (const sg of state.surfaceGrains) {
+                        if (sg.zone !== 'topFunnel') continue;
+                        const distRatio = 1 - sg.progress; // Moves from outer edge (1) -> center (0)
+                        const gx = GEO.cx + sg.side * distRatio * (topRx * 0.85);
+                        const gy = topSurfaceY + sg.spread * ellipseRy * 0.65 + (1 - distRatio) * (funnelDip * 0.45);
+                        ctx.fillStyle = sg.color;
+                        ctx.beginPath();
+                        ctx.arc(gx, gy, sg.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                ctx.restore();
+            }
+
+            // 4. DRAW LOWER BULB ACCUMULATING 3D SAND DUNE MOUND
+            if (elapsedRatio > 0.002) {
+                ctx.save();
+
+                // Conical desert sand mound spreads wider with a natural angle of repose
+                const shoulderY = Math.min(GEO.glassBotY, bottomPeakY + 56 * (1 - elapsedRatio * 0.42));
+                const shoulderRx = getLowerBulbHalfWidth(shoulderY);
+
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx - GEO.bulbMaxRx - 10, GEO.glassBotY + 10);
+                ctx.lineTo(GEO.cx - shoulderRx - 6, shoulderY);
+                // Smooth natural desert sand cone slope up to the apex
+                ctx.quadraticCurveTo(GEO.cx - shoulderRx * 0.36, bottomPeakY + 9, GEO.cx, bottomPeakY);
+                ctx.quadraticCurveTo(GEO.cx + shoulderRx * 0.36, bottomPeakY + 9, GEO.cx + shoulderRx + 6, shoulderY);
+                ctx.lineTo(GEO.cx + GEO.bulbMaxRx + 10, GEO.glassBotY + 10);
+                ctx.closePath();
+
+                if (state.material === 'sand') {
+                    fillRealisticSandVolume(ctx, mat, bottomPeakY - 10, GEO.glassBotY + 12);
+
+                    // Subtle conical dune ripple contours on the accumulating sand pile
+                    ctx.save();
+                    ctx.clip();
+                    ctx.strokeStyle = 'rgba(255, 224, 150, 0.16)';
+                    ctx.lineWidth = 1.3;
+                    for (let dy = bottomPeakY + 18; dy < GEO.glassBotY - 6; dy += 15) {
+                        const spanRx = getLowerBulbHalfWidth(dy);
+                        const curveUp = Math.min(24, (dy - bottomPeakY) * 0.22);
+                        ctx.beginPath();
+                        ctx.moveTo(GEO.cx - spanRx, dy);
+                        ctx.quadraticCurveTo(GEO.cx, dy - curveUp, GEO.cx + spanRx, dy);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                } else {
+                    const bulkGrad = ctx.createLinearGradient(
+                        GEO.cx - GEO.bulbMaxRx, 0,
+                        GEO.cx + GEO.bulbMaxRx, 0
+                    );
+                    mat.bulkGradient.forEach(s => bulkGrad.addColorStop(s.stop, s.color));
+                    ctx.fillStyle = bulkGrad;
+                    ctx.fill();
+                }
+
+                // Sunlit highlight on the mound apex where the falling sand stream lands
+                const apexGrad = ctx.createRadialGradient(GEO.cx, bottomPeakY + 5, 2, GEO.cx, bottomPeakY + 18, 48);
+                apexGrad.addColorStop(0, mat.topSurfaceLight);
+                apexGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = apexGrad;
+                ctx.fill();
+
+                // Draw avalanching micro-grains rolling down the left & right slopes of the bottom sand cone
+                if (state.material === 'sand' && elapsedRatio > 0.03 && remainingRatio > 0) {
+                    const maxSlopeRx = Math.min(GEO.bulbMaxRx - 10, shoulderRx);
+                    const slopeDropY = Math.min(54, GEO.glassBotY - bottomPeakY);
+                    for (const sg of state.surfaceGrains) {
+                        if (sg.zone !== 'bottomSlope') continue;
+                        const gx = GEO.cx + sg.side * sg.progress * maxSlopeRx * (0.75 + sg.spread * 0.2);
+                        const gy = bottomPeakY + 3 + sg.progress * slopeDropY + Math.abs(sg.spread) * 4;
+                        if (gy < GEO.glassBotY - 4) {
+                            ctx.fillStyle = sg.color;
+                            ctx.beginPath();
+                            ctx.arc(gx, gy, sg.radius, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                }
+
+                ctx.restore();
+            }
+
+            // 5. FLOATING QUANTUM `e⁻` SYMBOLS INSIDE THE BULK (Electron Mode)
+            if (state.material === 'electron') {
+                ctx.save();
+                ctx.font = '700 14px "JetBrains Mono", monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                for (const fp of state.floatingInsideParticles) {
+                    const driftX = Math.sin(now * 0.002 * fp.speed + fp.phase) * 8;
+                    const driftY = Math.cos(now * 0.0018 * fp.speed + fp.phase) * 5;
+
+                    if (fp.chamber === 'top' && remainingRatio > 0.06) {
+                        const y = topSurfaceY + 14 + fp.offsetY * (GEO.neckY - topSurfaceY - 24) + driftY;
+                        if (y > topSurfaceY + 8 && y < GEO.neckY - 12) {
+                            const maxRx = Math.max(0, getUpperBulbHalfWidth(y) - 18);
+                            const x = GEO.cx + fp.offsetX * maxRx + driftX;
+                            ctx.fillStyle = 'rgba(224, 242, 254, 0.88)';
+                            ctx.shadowColor = '#38bdf8';
+                            ctx.shadowBlur = 6;
+                            ctx.fillText('e⁻', x, y);
+                        }
+                    } else if (fp.chamber === 'bottom' && elapsedRatio > 0.06) {
+                        const y = bottomPeakY + 18 + fp.offsetY * (GEO.glassBotY - bottomPeakY - 26) + driftY;
+                        if (y > bottomPeakY + 14 && y < GEO.glassBotY - 10) {
+                            const maxRx = Math.max(0, getLowerBulbHalfWidth(y) - 18);
+                            const x = GEO.cx + fp.offsetX * maxRx + driftX;
+                            ctx.fillStyle = 'rgba(224, 242, 254, 0.88)';
+                            ctx.shadowColor = '#38bdf8';
+                            ctx.shadowBlur = 6;
+                            ctx.fillText('e⁻', x, y);
+                        }
+                    }
+                }
+                ctx.restore();
+            }
+
+            ctx.restore(); // End inner glass clip
+
+            /****************************************************************
+             * STEP C: REALISTIC 3D BLOWN-GLASS HIGHLIGHTS & CONTOUR EDGES
+             * (Matches the curved white/grey reflections in the screenshot)
+             ****************************************************************/
+            ctx.save();
+
+            // Outer dark crisp outline + subtle inner glass rim
+            traceHourglassBulbPath(ctx, 0);
+            ctx.lineWidth = 3.2;
+            ctx.strokeStyle = '#11161d';
+            ctx.stroke();
+
+            traceHourglassBulbPath(ctx, 2.5);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = 'rgba(180, 200, 220, 0.16)';
+            ctx.stroke();
+
+            // Left-side curved 3D glass specular highlight (Upper Bulb)
+            ctx.beginPath();
+            for (let i = 8; i <= 54; i++) {
+                const y = GEO.glassTopY + (i / 65) * (GEO.neckY - GEO.glassTopY);
+                const rx = getUpperBulbHalfWidth(y);
+                const x = GEO.cx - rx * 0.72;
+                if (i === 8) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.lineWidth = 14;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Right-side curved 3D glass specular reflection (Lower Bulb - just like screenshot)
+            ctx.beginPath();
+            for (let i = 10; i <= 56; i++) {
+                const y = GEO.neckY + (i / 65) * (GEO.glassBotY - GEO.neckY);
+                const rx = getLowerBulbHalfWidth(y);
+                const x = GEO.cx + rx * 0.65;
+                if (i === 10) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 22;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Left-side subtle edge reflection on Lower Bulb
+            ctx.beginPath();
+            for (let i = 14; i <= 55; i++) {
+                const y = GEO.neckY + (i / 65) * (GEO.glassBotY - GEO.neckY);
+                const rx = getLowerBulbHalfWidth(y);
+                const x = GEO.cx - rx * 0.80;
+                if (i === 14) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            ctx.restore();
+
+            /****************************************************************
+             * STEP D: 3D METALLIC / STONE STAND (Pillars & Double Caps)
+             * Built to match the exact grey 3D stand in your screenshot
+             ****************************************************************/
+            drawHourglassFrame(ctx);
+
+            ctx.restore();
+        }
+
+        /**
+         * Helper to draw a rounded rectangle with 3D gradient and crisp outline
+         */
+        function drawRoundedBox(context, x, y, w, h, r, fillStyle, strokeStyle = '#11161d', lineWidth = 2.8) {
+            context.beginPath();
+            context.roundRect(x, y, w, h, r);
+            context.fillStyle = fillStyle;
+            context.fill();
+            if (strokeStyle) {
+                context.lineWidth = lineWidth;
+                context.strokeStyle = strokeStyle;
+                context.stroke();
+            }
+        }
+
+        /**
+         * Draws the vertical support pillars and double-layered top/bottom caps
+         * matching the exact reference screenshot
+         */
+        function drawHourglassFrame(context) {
+            const pillarWidth = 26;
+            const leftPillarX = 108;
+            const rightPillarX = VW - 108 - pillarWidth;
+            const pillarTopY = GEO.topCapY + GEO.topCapH - 4;
+            const pillarH = GEO.botCapY - pillarTopY + 4;
+
+            // 1. Left & Right Vertical Cylindrical Pillars
+            [leftPillarX, rightPillarX].forEach(px => {
+                const pGrad = context.createLinearGradient(px, 0, px + pillarWidth, 0);
+                pGrad.addColorStop(0.0, '#5a6569');
+                pGrad.addColorStop(0.32, '#8b979b');
+                pGrad.addColorStop(0.65, '#748084');
+                pGrad.addColorStop(1.0, '#444d50');
+
+                drawRoundedBox(context, px, pillarTopY, pillarWidth, pillarH, 4, pGrad);
+
+                // Top & Bottom shadow collars on the pillars for 3D depth
+                const topShadow = context.createLinearGradient(0, pillarTopY, 0, pillarTopY + 26);
+                topShadow.addColorStop(0, 'rgba(0,0,0,0.45)');
+                topShadow.addColorStop(1, 'rgba(0,0,0,0)');
+                context.fillStyle = topShadow;
+                context.fillRect(px + 2, pillarTopY + 2, pillarWidth - 4, 24);
+
+                const botShadow = context.createLinearGradient(0, pillarTopY + pillarH - 26, 0, pillarTopY + pillarH);
+                botShadow.addColorStop(0, 'rgba(0,0,0,0)');
+                botShadow.addColorStop(1, 'rgba(0,0,0,0.45)');
+                context.fillStyle = botShadow;
+                context.fillRect(px + 2, pillarTopY + pillarH - 26, pillarWidth - 4, 24);
+            });
+
+            // 2. Top Inner Step Plate (Holds upper glass bulb)
+            const innerW = 310;
+            const innerX = GEO.cx - innerW / 2;
+            const innerGrad = context.createLinearGradient(innerX, 0, innerX + innerW, 0);
+            innerGrad.addColorStop(0, '#626d71');
+            innerGrad.addColorStop(0.5, '#8c989c');
+            innerGrad.addColorStop(1, '#586367');
+
+            drawRoundedBox(
+                context,
+                innerX,
+                GEO.topInnerPlateY - 4,
+                innerW,
+                GEO.topInnerPlateH + 4,
+                [0, 0, 14, 14],
+                innerGrad
+            );
+
+            // 3. Bottom Inner Step Plate (Holds lower glass bulb)
+            drawRoundedBox(
+                context,
+                innerX,
+                GEO.botInnerPlateY,
+                innerW,
+                GEO.botInnerPlateH + 4,
+                [14, 14, 0, 0],
+                innerGrad
+            );
+
+            // 4. Main Outer Top Cap (Wide pill cap)
+            const outerW = 436;
+            const outerX = GEO.cx - outerW / 2;
+            const capGrad = context.createLinearGradient(outerX, GEO.topCapY, outerX, GEO.topCapY + GEO.topCapH);
+            capGrad.addColorStop(0, '#96a2a6');
+            capGrad.addColorStop(0.5, '#7f8b8f');
+            capGrad.addColorStop(1, '#647074');
+
+            drawRoundedBox(
+                context,
+                outerX,
+                GEO.topCapY,
+                outerW,
+                GEO.topCapH,
+                21,
+                capGrad
+            );
+
+            // 5. Main Outer Bottom Cap (Wide pill base)
+            const botCapGrad = context.createLinearGradient(outerX, GEO.botCapY, outerX, GEO.botCapY + GEO.botCapH);
+            botCapGrad.addColorStop(0, '#96a2a6');
+            botCapGrad.addColorStop(0.5, '#7f8b8f');
+            botCapGrad.addColorStop(1, '#626e72');
+
+            drawRoundedBox(
+                context,
+                outerX,
+                GEO.botCapY,
+                outerW,
+                GEO.botCapH,
+                21,
+                botCapGrad
+            );
+        }
+
+        /********************************************************************
+         * 5. DIGITAL CLOCK & UI SYNCHRONIZATION
+         ********************************************************************/
+        const timerDisplay = document.getElementById('timerDisplay');
+        const progressBar = document.getElementById('progressBar');
+        const statusDot = document.getElementById('statusDot');
+        const statusLabel = document.getElementById('statusLabel');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playPauseIcon = document.getElementById('playPauseIcon');
+        const playPauseText = document.getElementById('playPauseText');
+        const quickMaterialBadge = document.getElementById('quickMaterialBadge');
+        const quickMaterialText = document.getElementById('quickMaterialText');
+        const completeBanner = document.getElementById('completeBanner');
+
+        function formatCountdown(sec) {
+            const clamped = Math.max(0, Math.ceil(sec));
+            const totalMinutes = Math.floor(clamped / 60);
+            const seconds = clamped % 60;
+            const mm = String(totalMinutes).padStart(2, '0');
+            const ss = String(seconds).padStart(2, '0');
+            return `${mm}:${ss}`;
+        }
+
+        function syncUI() {
+            // Update digital display
+            const formatted = formatCountdown(state.remainingSeconds);
+            timerDisplay.textContent = formatted;
+            document.title = `${formatted} • Focus Hourglass`;
+
+            // Progress bar
+            const pct = state.totalSeconds > 0 ? (state.remainingSeconds / state.totalSeconds) * 100 : 0;
+            progressBar.style.width = `${ Math.max(0, Math.min(100, pct)) }%`;
+
+            // Material theme styling
+            const isElectron = state.material === 'electron';
+            timerDisplay.classList.toggle('electron-glow-text', isElectron);
+
+            progressBar.className = `h-full transition-all duration-300 rounded-full ${
+                isElectron ? 'bg-sky-400 shadow-[0_0_12px_#38bdf8]' : 'bg-amber-400'
+            }`;
+
+            statusDot.className = `w-2 h-2 rounded-full ${
+                state.isRunning ? 'animate-pulse' : ''
+            } ${isElectron ? 'bg-sky-400' : 'bg-amber-400'}`;
+
+            const matTitle = isElectron ? 'Electrons (e⁻)' : 'Golden Sand';
+            const runStatus = state.remainingSeconds <= 0
+                ? 'Session Complete'
+                : (state.isRunning ? 'Focusing' : 'Paused');
+            statusLabel.textContent = `${runStatus} • ${matTitle}`;
+
+            // Play/Pause button look
+            if (state.isRunning) {
+                playPauseIcon.className = 'ph-fill ph-pause text-lg';
+                playPauseText.textContent = 'Pause';
+            } else {
+                playPauseIcon.className = 'ph-fill ph-play text-lg';
+                playPauseText.textContent = state.remainingSeconds <= 0 ? 'Restart' : 'Resume';
+            }
+
+            playPauseBtn.className = `flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition shadow-lg active:scale-95 text-slate-950 ${
+                isElectron
+                    ? 'bg-sky-400 hover:bg-sky-300 shadow-sky-500/20'
+                    : 'bg-amber-400 hover:bg-amber-300 shadow-amber-500/20'
+            }`;
+
+            // Quick material button badge
+            if (isElectron) {
+                quickMaterialBadge.textContent = 'e⁻';
+                quickMaterialBadge.className = 'w-5 h-5 rounded-md bg-sky-400/20 border border-sky-400/50 text-sky-300 flex items-center justify-center text-xs font-mono font-bold';
+                quickMaterialText.textContent = 'Electron';
+            } else {
+                quickMaterialBadge.textContent = '⏳';
+                quickMaterialBadge.className = 'w-5 h-5 rounded-md bg-amber-400/20 border border-amber-400/50 text-amber-300 flex items-center justify-center text-xs font-mono font-bold';
+                quickMaterialText.textContent = 'Sand';
+            }
+        }
+
+        /********************************************************************
+         * 6. MAIN ANIMATION & COUNTDOWN LOOP
+         ********************************************************************/
+        function animateLoop(now) {
+            const dt = Math.min(0.1, (now - state.lastTickTime) / 1000);
+            state.lastTickTime = now;
+
+            if (state.isRunning && state.remainingSeconds > 0) {
+                const prevCeil = Math.ceil(state.remainingSeconds);
+                state.remainingSeconds = Math.max(0, state.remainingSeconds - dt);
+                const newCeil = Math.ceil(state.remainingSeconds);
+
+                if (newCeil !== prevCeil) {
+                    syncUI();
+                } else {
+                    // Smooth progress bar update
+                    const pct = (state.remainingSeconds / state.totalSeconds) * 100;
+                    progressBar.style.width = `${pct}%`;
+                }
+
+                if (state.remainingSeconds <= 0) {
+                    state.remainingSeconds = 0;
+                    state.isRunning = false;
+                    syncUI();
+                    playCompletionChime();
+                    completeBanner.classList.remove('hidden');
+                    completeBanner.classList.add('flex');
+                }
+            }
+
+            renderStarfield(now);
+            renderHourglass(now, dt);
+            requestAnimationFrame(animateLoop);
+        }
+
+        /********************************************************************
+         * 7. INTERACTIVE CONTROLS & SETTINGS MODAL HANDLERS
+         ********************************************************************/
+        const settingsModal = document.getElementById('settingsModal');
+        const customMinutesInput = document.getElementById('customMinutesInput');
+        const customSecondsInput = document.getElementById('customSecondsInput');
+        const presetButtons = document.querySelectorAll('.duration-preset');
+        const matSandCard = document.getElementById('matSandCard');
+        const matElectronCard = document.getElementById('matElectronCard');
+        const hourglassWrapper = document.getElementById('hourglassWrapper');
+
+        let modalSelectedMaterial = 'sand';
+
+        function selectModalMaterial(matKey) {
+            modalSelectedMaterial = matKey;
+            if (matKey === 'sand') {
+                matSandCard.className = 'material-card cursor-pointer p-4 rounded-2xl border-2 border-amber-400 bg-amber-500/15 transition flex items-start gap-3.5';
+                matElectronCard.className = 'material-card cursor-pointer p-4 rounded-2xl border-2 border-white/10 bg-white/5 hover:bg-white/10 transition flex items-start gap-3.5';
+            } else {
+                matElectronCard.className = 'material-card cursor-pointer p-4 rounded-2xl border-2 border-sky-400 bg-sky-500/15 transition flex items-start gap-3.5';
+                matSandCard.className = 'material-card cursor-pointer p-4 rounded-2xl border-2 border-white/10 bg-white/5 hover:bg-white/10 transition flex items-start gap-3.5';
+            }
+        }
+
+        function highlightDurationPreset(mins, secs) {
+            presetButtons.forEach(btn => {
+                const bMins = parseInt(btn.getAttribute('data-mins'), 10);
+                if (bMins === mins && secs === 0) {
+                    btn.className = 'duration-preset py-2.5 rounded-xl text-sm font-semibold border border-amber-400 bg-amber-500/20 text-amber-300 transition';
+                } else {
+                    btn.className = 'duration-preset py-2.5 rounded-xl text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition';
+                }
+            });
+        }
+
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mins = parseInt(btn.getAttribute('data-mins'), 10);
+                customMinutesInput.value = mins;
+                customSecondsInput.value = 0;
+                highlightDurationPreset(mins, 0);
+            });
+        });
+
+        [customMinutesInput, customSecondsInput].forEach(inp => {
+            inp.addEventListener('input', () => {
+                const m = parseInt(customMinutesInput.value, 10) || 0;
+                const s = parseInt(customSecondsInput.value, 10) || 0;
+                highlightDurationPreset(m, s);
+            });
+        });
+
+        matSandCard.addEventListener('click', () => selectModalMaterial('sand'));
+        matElectronCard.addEventListener('click', () => selectModalMaterial('electron'));
+
+        // Apply settings and launch focus timer
+        document.getElementById('applyAndStartBtn').addEventListener('click', () => {
+            ensureAudioContext();
+            let mins = parseInt(customMinutesInput.value, 10) || 0;
+            let secs = parseInt(customSecondsInput.value, 10) || 0;
+            mins = Math.max(0, Math.min(180, mins));
+            secs = Math.max(0, Math.min(59, secs));
+
+            let total = mins * 60 + secs;
+            if (total <= 0) {
+                total = 30 * 60; // Fallback to 30m if 0 entered
+                customMinutesInput.value = 30;
+                customSecondsInput.value = 0;
+            }
+
+            state.totalSeconds = total;
+            state.remainingSeconds = total;
+            state.material = modalSelectedMaterial;
+            state.particles = [];
+            state.isRunning = true;
+
+            completeBanner.classList.add('hidden');
+            completeBanner.classList.remove('flex');
+            settingsModal.classList.add('opacity-0', 'pointer-events-none');
+            playFlipSound();
+            syncUI();
+        });
+
+        // Open / Close Settings Modal
+        document.getElementById('openSettingsBtn').addEventListener('click', () => {
+            const curMins = Math.floor(state.totalSeconds / 60);
+            const curSecs = state.totalSeconds % 60;
+            customMinutesInput.value = curMins;
+            customSecondsInput.value = curSecs;
+            highlightDurationPreset(curMins, curSecs);
+            selectModalMaterial(state.material);
+            settingsModal.classList.remove('opacity-0', 'pointer-events-none');
+        });
+
+        document.getElementById('closeSettingsBtn').addEventListener('click', () => {
+            settingsModal.classList.add('opacity-0', 'pointer-events-none');
+        });
+
+        // Play / Pause toggle (both via button and clicking the big countdown digits)
+        function togglePlayPause() {
+            ensureAudioContext();
+            if (state.remainingSeconds <= 0) {
+                flipAndRestartHourglass();
+                return;
+            }
+            state.isRunning = !state.isRunning;
+            syncUI();
+        }
+
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        timerDisplay.addEventListener('click', togglePlayPause);
+
+        // Reset Hourglass Timer cleanly (keeps the 3D hourglass 100% stationary)
+        function flipAndRestartHourglass() {
+            ensureAudioContext();
+            playFlipSound();
+            completeBanner.classList.add('hidden');
+            completeBanner.classList.remove('flex');
+
+            state.remainingSeconds = state.totalSeconds;
+            state.particles = [];
+            state.isRunning = true;
+            syncUI();
+        }
+
+        document.getElementById('flipResetBtn').addEventListener('click', flipAndRestartHourglass);
+        document.getElementById('bannerFlipBtn').addEventListener('click', flipAndRestartHourglass);
+
+        // Quick Material Switcher on bottom bar
+        document.getElementById('quickMaterialBtn').addEventListener('click', () => {
+            state.material = state.material === 'sand' ? 'electron' : 'sand';
+            state.particles = [];
+            syncUI();
+        });
+
+        // Sound Toggle
+        const soundIcon = document.getElementById('soundIcon');
+        document.getElementById('soundToggleBtn').addEventListener('click', () => {
+            state.soundEnabled = !state.soundEnabled;
+            soundIcon.className = state.soundEnabled
+                ? 'ph-bold ph-speaker-high text-lg text-white'
+                : 'ph-bold ph-speaker-slash text-lg text-slate-500';
+        });
+
+        // Fullscreen Toggle
+        const fullscreenIcon = document.getElementById('fullscreenIcon');
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+                fullscreenIcon.className = 'ph-bold ph-corners-in text-lg';
+            } else {
+                document.exitFullscreen().catch(() => {});
+                fullscreenIcon.className = 'ph-bold ph-corners-out text-lg';
+            }
+        });
+
+        // Auto-hide bottom controls when studying without moving mouse for 3.5 seconds
+        let idleTimer = null;
+        function resetIdleTimer() {
+            document.body.classList.remove('idle-focus');
+            clearTimeout(idleTimer);
+            const modalHidden = settingsModal.classList.contains('opacity-0');
+            if (state.isRunning && modalHidden) {
+                idleTimer = setTimeout(() => {
+                    document.body.classList.add('idle-focus');
+                }, 3500);
+            }
+        }
+
+        window.addEventListener('mousemove', resetIdleTimer);
+        window.addEventListener('touchstart', resetIdleTimer);
+        window.addEventListener('keydown', (e) => {
+            resetIdleTimer();
+            if (e.code === 'Space' && settingsModal.classList.contains('opacity-0')) {
+                e.preventDefault();
+                togglePlayPause();
+            }
+        });
+
+        // Window Resize Handling
+        window.addEventListener('resize', () => {
+            initStars();
+            resizeHourglassCanvas();
+        });
+
+        // Initialize Everything on Load
+        window.onload = function () {
+            generateDesertSandTexture();
+            initStars();
+            resizeHourglassCanvas();
+            syncUI();
+            requestAnimationFrame(animateLoop);
+        };
+    </script>
+</body>
+</html>
